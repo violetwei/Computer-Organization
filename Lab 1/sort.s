@@ -20,9 +20,9 @@ LOOP2:  SUBS R7, R7, #1   // decrement LOOP2 counter
 		BEQ  LOOP1        // branch to LOOP1
 		ADD R2, R2, #4    // R2 points to next number in the list
 		ADD R3, R3, #4
-		LDR R0, [R2]      // R0 holds A[i]
-		LDR R1, [R3]      // R1 holds A[i-1]
-		CMP R0, R1        // if A[i] < A[i-1], SWAP
+		LDR R0, [R2]      // R0 holds A[i-1]
+		LDR R1, [R3]      // R1 holds A[i]
+		CMP R0, R1        // if A[i-1] > A[i], SWAP
 		BGE SWAP          // branch to SWAP
  		B LOOP2           // go back to loop
 
