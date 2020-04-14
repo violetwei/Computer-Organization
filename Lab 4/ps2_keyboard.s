@@ -14,50 +14,58 @@
 
 // PS/2 Keyboard Test	
 Keyboard_test:
-        push    {fp, lr}
-        add     fp, sp, #4
-        sub     sp, sp, #16
-        mov     r3, #0
-        str     r3, [fp, #-8]
-        mov     r3, #0
-        str     r3, [fp, #-12]
-        mov     r3, #0
-        str     r3, [fp, #-16]
-        bl      VGA_clear_charbuff_ASM
-        bl      VGA_clear_pixelbuff_ASM
-.L5:
-        ldr     r0, [fp, #-20]
-        bl      read_PS2_data_ASM
-        str     r0, [fp, #-16]
-        ldr     r3, [fp, #-16]
-        cmp     r3, #0
-        beq     .L2
-        ldr     r3, [fp, #-20]
-        ldrb    r3, [r3]        @ zero_extendqisi2
-        mov     r2, r3
-        ldr     r1, [fp, #-12]
-        ldr     r0, [fp, #-8]
-        bl      VGA_write_byte_ASM
-        ldr     r3, [fp, #-8]
-        add     r3, r3, #3
-        str     r3, [fp, #-8]
-.L2:
-        ldr     r3, [fp, #-8]
-        cmp     r3, #79
-        ble     .L3
-        mov     r3, #0
-        str     r3, [fp, #-8]
-        ldr     r3, [fp, #-12]
-        add     r3, r3, #1
-        str     r3, [fp, #-12]
-.L3:
-        ldr     r3, [fp, #-12]
-        cmp     r3, #59
-        ble     .L5
-        bl      VGA_clear_charbuff_ASM
-        mov     r3, #0
-        str     r3, [fp, #-12]
-        b       .L5
+        PUSH    {R11, LR}
+        ADD     R11, SP, #4
+        SUB     SP, SP, #16
+        MOV     R3, #0
+        STR     R3, [R11, #-8]
+        MOV     R3, #0
+        STR     R3, [R11, #-12]
+        MOV     R3, #0
+        STR     R3, [R11, #-16]
+        BL      VGA_clear_charbuff_ASM  // Initially clear screen
+        BL      VGA_clear_pixelbuff_ASM
+
+write_to_screen:
+        // Get RVALID bit
+        LDR     R0, [R11, #-20]
+        BL      read_PS2_data_ASM
+        STR     R0, [R11, #-16]
+        // if it's valid, map PS2 data to data var
+        LDR     R3, [R11, #-16]
+        CMP     R3, #0 // check if x is 0
+        BEQ     check_x_bound    // if is 0, branch to check_x_bound
+        // write to VGA buffer screen
+        LDR     R3, [R11, #-20]
+        LDRB    R3, [R3]        
+        MOV     R2, R3
+        LDR     R1, [R11, #-12]
+        LDR     R0, [R11, #-8]
+        BL      VGA_write_byte_ASM
+        // increment x by 3
+        LDR     R3, [R11, #-8]
+        ADD     R3, R3, #3
+        STR     R3, [R11, #-8]
+
+check_x_bound: 
+        LDR     R3, [R11, #-8]
+        CMP     R3, #79  // check if x is larger than 79
+        BLE     check_y_bound  // if not, branch to check_y_bound
+        // reset x to 0
+        MOV     R3, #0
+        STR     R3, [R11, #-8]
+        LDR     R3, [R11, #-12]
+        ADD     R3, R3, #1  // increment y by 1
+        STR     R3, [R11, #-12]
+
+check_y_bound:
+        LDR     R3, [R11, #-12]
+        CMP     R3, #59   // check if y is larger than 59
+        BLE     write_to_screen // if not
+        BL      VGA_clear_charbuff_ASM  // Clear screen when it's filled out
+        MOV     R3, #0  // reset y to 0
+        STR     R3, [R11, #-12]
+        B       write_to_screen
 
 // the subroutine that is required to implement
 // output R0: Integer that denotes whether the data read is valid or not
@@ -66,71 +74,71 @@ read_PS2_data_ASM:
 	LDR R1, =PS2_Data				// Load R1 with PS2 data address
 	LDR R3, [R1]					// R3 holds value of PS2_Data
 	ANDS R2, R3, #0x00008000		// Get the RVALID bit (bit 15)
-	MOVEQ R0, #0					// If it's 0, return 0
+	MOVEQ R0, #0					// If RVALID = s 0, return 0
 	POPEQ {R1-R4}
 	BXEQ LR
 									// If it's 1,
 	AND R2, R3, #0x000000FF			// Get data from PS2 data address (first 8 bits)
-	STR R2, [R0]					// Store data to input pointer value
-	MOV R0, #1						// return 1
-	POP {R1-R4}
+	STR R2, [R0]					// Store data to (location received) input pointer value
+	MOV R0, #1						// return 1 - indicate valid
+	POP {R1-R4}                     // recover
 	BX LR  
 	
 // set all valid memory locations in character buffer to 0
-// inputs: none
+// no input/output arguments
 VGA_clear_charbuff_ASM:
 	
-	PUSH {R0-R8,LR}				// store registers in use for recovery later
+	PUSH {R0-R8, LR}			
 	MOV R0, #79 				// start x counter at 59
 	MOV R1, #59					// start y counter at 79
 	MOV R8, R1					// copy of y counter for inner loop reset
 	LDR R2, =CHARACTER_buffer	// base address
-	LDR R3, ZEROS				// get some zeros ready
+	LDR R3, ZEROS				
 
-CHAR_LOOP_O:
+Char_Outer_Loop:
 	CMP R0, #0
-	BLT CHAR_END_CLEAR 	// Outer loop counter, looks at x address
-	MOV R1, R8			// Reset inner loop
+	BLT Char_End_Clear 	// Outer loop counter, looks at x address
+	MOV R1, R8			// Reset inner loop - x counter
 
-CHAR_LOOP_I:
+Char_Inner_Loop:
 	CMP R1, #0			// Inner loop, looks at y address
 	SUBLT R0, R0, #1	// Decrement outer loop
-	BLT CHAR_LOOP_O		// back to outer loop
+	BLT Char_Outer_Loop	// back to outer loop
 
-	MOV R4, R1			// take y counter
+	MOV R4, R1			// y counter
 	ROR R4, #25			// rotate y counter into correct position
-	ORR R4, R2			// get base address in there
+	ORR R4, R2			// get base address there
 	ORR R4, R0 			// add in the x counter
 
-	STRB R3, [R4] 		// store 0s into the location we determined
+	STRB R3, [R4] 		// store 0s into the location 
 	SUB R1, R1, #1 		// decrement y counter
-	B CHAR_LOOP_I
+	B Char_Inner_Loop
 
-CHAR_END_CLEAR: 
-	POP {R0-R8,LR}			// restore used registers
-	BX LR 					// leave
+Char_End_Clear: 
+	POP {R0-R8,LR}			// restore registers
+	BX LR 					
 	
 // set all valid memory locations in pixel buffer to 0
-// inputs: none
+// no input/output arguments
 VGA_clear_pixelbuff_ASM:
 
 	PUSH {R0-R8,LR}
 	MOV R0, #300 			// start x counter at 319
-	ADD R0, R0, #19				// immediate value structure can't handle 319, use addition instead
+	ADD R0, R0, #19			
 	MOV R1, #239			// start y counter at 239
 	MOV R8, R1				// copy of y counter for inner loop reset
 	LDR R2, =PIXEL_buffer	// base address
-	LDR R3, ZEROS			// get some zeros ready
+	LDR R3, ZEROS			
 
-LOOP_OUTER:
+Outer_Loop_Clear:
 		CMP R0, #0
-		BLT END_CLEAR 		// Outer loop counter, looks at x address
+		BLT End_Clear 		// Outer loop counter, at x address
 		MOV R1, R8			// Reset inner loop
 
-LOOP_INNER:
-		CMP R1, #0			// Inner loop, looks at y address
+Inner_Loop_Clear:
+		CMP R1, #0			// Inner loop, at y address
 		SUBLT R0, R0, #1		// Decrement outer loop
-		BLT LOOP_OUTER		// back to outer loop
+		BLT Outer_Loop_Clear	// back to outer loop
 
 		MOV R4, R1			// take y counter
 		ROR R4, #22			// rotate y counter into correct position
@@ -141,27 +149,25 @@ LOOP_INNER:
 
 		STRH R3, [R4] 		// store 0s into the location we determined
 		SUB R1, R1, #1 		// decrement y counter
-		B LOOP_INNER
+		B Inner_Loop_Clear
 
-END_CLEAR: 
-	POP {R0-R8,LR}			// restore used registers
-	BX LR 					// leave
+End_Clear: 
+	POP {R0-R8,LR}			// restore registers
+	BX LR 					
 
 
-// write ASCII code passed in 3rd input
 // store value of 3rd input at address calculated with first 2 inputs
-// check that the supplied coordinates are valid
-// inputs: R0 = x coordinate, R1 = y coordinate, R2 = ASCII code for char
+// Inputs: R0 -> x coordinate, R1 -> y coordinate, R2 -> ASCII code 
 VGA_write_char_ASM:
 
-	PUSH {R0-R5, LR}			// save the registers we're about to use
+	PUSH {R0-R5, LR}			
 	LDR R5, =CHARACTER_buffer	// base address
 
-	CMP R0, #79				// check that x is within the allowed range
+	CMP R0, #79				// check that x is within the range
 	BGT END_WRITE_CHAR
 	CMP R0, #0
 	BLT END_WRITE_CHAR
-	CMP R1, #59				// check that y is within the allowed range
+	CMP R1, #59				// check that y is within the range
 	BGT END_WRITE_CHAR
 	CMP R1, #0
 	BLT END_WRITE_CHAR
@@ -173,8 +179,8 @@ VGA_write_char_ASM:
 	STRB R2, [R4]		// store the input value to the address
 
 END_WRITE_CHAR:
-	POP {R0-R5, LR}		// recover saved registers
-	BX LR	 			// leave
+	POP {R0-R5, LR}		// recover registers
+	BX LR	 			
 
 
 // write hexadecimal representation of value passed in 3rd input
