@@ -1,4 +1,4 @@
-    .text
+        .text
 
 	.equ PIXEL_buffer, 0xC8000000
 	.equ CHARACTER_buffer, 0xC9000000
@@ -23,201 +23,216 @@
 	
 // VGA Application Test 
 VGA_test:
-        push    {fp, lr}
-        add     fp, sp, #4
-        sub     sp, sp, #8
-.L6:
-        bl      read_PB_data_ASM
-        mov     r3, r0
-        and     r3, r3, #15
-        str     r3, [fp, #-8]
-        ldr     r3, [fp, #-8]
-        and     r3, r3, #1
-        cmp     r3, #0
-        beq     .Button0
-        bl      test_byte
-        b       .L6
-.Button0:
-        ldr     r3, [fp, #-8]
-        and     r3, r3, #2
-        cmp     r3, #0
-        beq     .Button1
-        bl      test_char
-        b       .L6
-.Button1:
-        ldr     r3, [fp, #-8]
-        and     r3, r3, #4
-        cmp     r3, #0
-        beq     .Button2
-        bl      test_pixel
-        b       .L6
-.Button2:
-        ldr     r3, [fp, #-8]
-        and     r3, r3, #8
-        cmp     r3, #0
-        beq     .L6
-        bl      VGA_clear_charbuff_ASM
-        bl      VGA_clear_pixelbuff_ASM
-        b       .L6
+        PUSH    {R11, LR}
+        ADD     R11, SP, #4
+        SUB     SP, SP, #8
+
+Start:
+        // 0xF & read_PB_data_ASM() - keep all 4 key digits
+        BL      read_PB_data_ASM
+        MOV     R3, R0
+        AND     R3, R3, #15
+        STR     R3, [R11, #-8] // 0xF & read_PB_data_ASM()
+        // if first button (PushButton 0) is pressed (0x1)
+        LDR     R3, [R11, #-8] // 0xF & read_PB_data_ASM()
+        AND     R3, R3, #1  // 0x1
+        CMP     R3, #0
+        BEQ     Button1
+        // Branch with Link to subroutine test_byte
+        BL      test_byte
+        B       Start
+
+Button1:
+        // if second key (PushButton 1) is pressed (0x2)
+        LDR     R3, [R11, #-8] // 0xF & read_PB_data_ASM()
+        AND     R3, R3, #2  // 0x2
+        CMP     R3, #0
+        BEQ     Button2
+        // Branch with Link to subroutine test_char
+        BL      test_char
+        B       Start
+
+Button2:
+        // if third key (PushButton 2) is pressed (0x4)
+        LDR     R3, [R11, #-8] // 0xF & read_PB_data_ASM()
+        AND     R3, R3, #4 //0x4
+        CMP     R3, #0
+        BEQ     Button3
+        // Branch with Link to subroutine test_pixel
+        BL      test_pixel
+        B       Start
+
+Button3:
+        // if the fourth key (PushButton 3) is pressed (0x8)
+        LDR     R3, [R11, #-8] // 0xF & read_PB_data_ASM()
+        AND     R3, R3, #8 // 0x8
+        CMP     R3, #0
+        BEQ     Start
+        // Branch with Link to subroutine VGA_clear_charbuff_ASM, VGA_clear_pixelbuff_ASM
+        BL      VGA_clear_charbuff_ASM
+        BL      VGA_clear_pixelbuff_ASM
+        B       Start
 	
 // convert test_char() funciton into assembly
 test_char:
-        push    {fp, lr}
-        add     fp, sp, #4
-        sub     sp, sp, #16
-        mov     r3, #0
-        strb    r3, [fp, #-13]
-        mov     r3, #0
-        str     r3, [fp, #-12]
-        b       .L2
-.L5:
-        mov     r3, #0
-        str     r3, [fp, #-8]
-        b       .L3
-.L4:
-        ldrb    r3, [fp, #-13]  @ zero_extendqisi2
-        add     r2, r3, #1
-        strb    r2, [fp, #-13]
-        mov     r2, r3
-        ldr     r1, [fp, #-12]
-        ldr     r0, [fp, #-8]
-        bl      VGA_write_char_ASM
-        ldr     r3, [fp, #-8]
-        add     r3, r3, #1
-        str     r3, [fp, #-8]
-.L3:
-        ldr     r3, [fp, #-8]
-        cmp     r3, #79
-        ble     .L4
-        ldr     r3, [fp, #-12]
-        add     r3, r3, #1
-        str     r3, [fp, #-12]
-.L2:
-        ldr     r3, [fp, #-12]
-        cmp     r3, #59
-        ble     .L5
-        nop
-        sub     sp, fp, #4
-        pop     {fp, pc}
-
+        PUSH {R0-R8, LR}
+		MOV R0, #0 // x
+		MOV R1, #0 // y
+		MOV R2, #0 // c
+		
+write_char_inner:
+        BL VGA_write_char_ASM
+		ADD R0, R0, #1 // x++
+		ADD R2, R2, #1 // c++
+		CMP R0, #80 // check if reached right edge of screen
+		BGE write_char_outer
+		B write_char_inner
+		
+write_char_outer:
+        MOV R0, #0 // reset x for the next row
+		ADD R1, R1, #1 // next row
+		CMP R1, #60 // check if reached bottom edge of screen
+		BGE write_char_finish
+		B write_char_inner
+		
+write_char_finish:
+        POP {R0-R8, LR}
+		BX LR
 
 // test_byte() function into assembly
+/*
 test_byte:
-        push    {fp, lr}
-        add     fp, sp, #4
-        sub     sp, sp, #16
-        mov     r3, #0
-        strb    r3, [fp, #-13]
-        mov     r3, #0
-        str     r3, [fp, #-12]
-        b       .Link2
-.Link5:
-        mov     r3, #0
-        str     r3, [fp, #-8]
-        b       .Link3
-.Link4:
-        ldrb    r3, [fp, #-13]  @ zero_extendqisi2
-        add     r2, r3, #1
-        strb    r2, [fp, #-13]
-        mov     r2, r3
-        ldr     r1, [fp, #-12]
-        ldr     r0, [fp, #-8]
-        bl      VGA_write_byte_ASM
-        ldr     r3, [fp, #-8]
-        add     r3, r3, #3
-        str     r3, [fp, #-8]
-.Link3:
-        ldr     r3, [fp, #-8]
-        cmp     r3, #79
-        ble     .Link4
-        ldr     r3, [fp, #-12]
-        add     r3, r3, #1
-        str     r3, [fp, #-12]
-.Link2:
-        ldr     r3, [fp, #-12]
-        cmp     r3, #59
-        ble     .Link5
-        nop
-        sub     sp, fp, #4
-        pop     {fp, pc}
+        PUSH {R0-R8, LR}
+		MOV R0, #0 // x
+		MOV R1, #0 // y
+		MOV R2, #0 // c
+		
+write_byte_inner:
+        BL VGA_write_byte_ASM
+		ADD R0, R0, #3 // x++
+		ADD R2, R2, #1 // c++
+		CMP R0, #80 // check if reached right edge of screen
+		BGE write_byte_outer
+		B write_byte_inner
+		
+write_byte_outer:
+        MOV R0, #0 // reset x for the next row
+		ADD R1, R1, #1 // next row
+		CMP R1, #60 // check if reached bottom edge of screen 
+		BGE write_byte_finish
+		B write_byte_inner
+		
+write_byte_finish:
+        POP {R0-R8, LR}
+		BX LR
+*/
+
+test_byte:
+        PUSH    {R11, LR}
+        ADD     R11, SP, #4
+        SUB     SP, SP, #16
+        MOV     R3, #0
+        STRB    R3, [R11, #-13]
+        MOV     R3, #0
+        STR     R3, [R11, #-12]
+        B       Outer_Loop
+
+begin_test_byte:
+        MOV     R3, #0 // reset to 0
+        STR     R3, [R11, #-8]
+        B       Inner_Loop
+
+write_byte_process:
+        LDRB    R3, [R11, #-13]  
+        ADD     R2, R3, #1
+        STRB    R2, [R11, #-13]
+        MOV     R2, R3
+        LDR     R1, [R11, #-12]
+        LDR     R0, [R11, #-8]
+        BL      VGA_write_byte_ASM
+        LDR     R3, [R11, #-8]
+        ADD     R3, R3, #3
+        STR     R3, [R11, #-8]
+
+Inner_Loop:
+        LDR     R3, [R11, #-8]
+        CMP     R3, #79 // check x if reached right edge of screen
+        BLE     write_byte_process
+        LDR     R3, [R11, #-12]
+        ADD     R3, R3, #1
+        STR     R3, [R11, #-12]
+
+Outer_Loop:
+        LDR     R3, [R11, #-12]
+        CMP     R3, #59 // check y if reached bottom edge of screen 
+        BLE     begin_test_byte
+        SUB     SP, R11, #4
+        POP     {R11, PC}
 
 // translate test_pixel() from c into assembly
 test_pixel:
-        push    {fp, lr}
-        add     fp, sp, #4
-        sub     sp, sp, #16
-        mov     r3, #0
-        strh    r3, [fp, #-14]  @ movhi
-        mov     r3, #0
-        str     r3, [fp, #-12]
-        b       .B2
-.B5:
-        mov     r3, #0
-        str     r3, [fp, #-8]
-        b       .B3
-.B4:
-        ldrh    r3, [fp, #-14]
-        add     r2, r3, #1
-        strh    r2, [fp, #-14]  @ movhi
-        mov     r2, r3
-        ldr     r1, [fp, #-12]
-        ldr     r0, [fp, #-8]
-        bl      VGA_draw_point_ASM
-        ldr     r3, [fp, #-8]
-        add     r3, r3, #1
-        str     r3, [fp, #-8]
-.B3:
-        ldr     r3, [fp, #-8]
-        cmp     r3, #320
-        blt     .B4
-        ldr     r3, [fp, #-12]
-        add     r3, r3, #1
-        str     r3, [fp, #-12]
-.B2:
-        ldr     r3, [fp, #-12]
-        cmp     r3, #239
-        ble     .B5
-        nop
-        sub     sp, fp, #4
-        pop     {fp, pc}
+        PUSH {R0-R8, LR}
+		MOV R0, #0 // x
+		MOV R1, #0 // y
+		MOV R2, #0 // color
+		MOV R3, #320 // 320
+		
+draw_pixel_inner:
+        BL VGA_draw_point_ASM
+		ADD R0, R0, #1 // x++
+		ADD R2, R2, #1 // color++
+		CMP R0, R3 // check if reach the right edge of the screen
+		BGE draw_pixel_outer
+		B draw_pixel_inner
+		
+draw_pixel_outer:
+        MOV R0, #0 // reset x
+		ADD R1, R1, #1 // next row
+		CMP R1, #240 // check if reach the bottom edge of screen
+		BGE draw_pixel_finish
+		B draw_pixel_inner
+		
+draw_pixel_finish:
+        POP {R0-R8, LR}
+		BX LR
 
 
 // set all valid memory locations in character buffer to 0
-// inputs: none
+// no input/output arguments
 VGA_clear_charbuff_ASM:
 	
-	PUSH {R0-R8,LR}				// store registers in use for recovery later
+	PUSH {R0-R8, LR}			// store registers in use for recovery later
 	MOV R0, #79 				// start x counter at 59
 	MOV R1, #59					// start y counter at 79
 	MOV R8, R1					// copy of y counter for inner loop reset
 	LDR R2, =CHARACTER_buffer	// base address
 	LDR R3, ZEROS				// get some zeros ready
 
-CHAR_LOOP_O:
+Char_Outer_Loop:
 	CMP R0, #0
-	BLT CHAR_END_CLEAR 	// Outer loop counter, looks at x address
-	MOV R1, R8			// Reset inner loop
+	BLT Char_End_Clear 	// Outer loop counter, looks at x address
+	MOV R1, R8			// Reset inner loop - x counter
 
-CHAR_LOOP_I:
+Char_Inner_Loop:
 	CMP R1, #0			// Inner loop, looks at y address
 	SUBLT R0, R0, #1	// Decrement outer loop
-	BLT CHAR_LOOP_O		// back to outer loop
+	BLT Char_Outer_Loop	// back to outer loop
 
-	MOV R4, R1			// take y counter
+	MOV R4, R1			// y counter
 	ROR R4, #25			// rotate y counter into correct position
 	ORR R4, R2			// get base address in there
 	ORR R4, R0 			// add in the x counter
 
 	STRB R3, [R4] 		// store 0s into the location we determined
 	SUB R1, R1, #1 		// decrement y counter
-	B CHAR_LOOP_I
+	B Char_Inner_Loop
 
-CHAR_END_CLEAR: 
+Char_End_Clear: 
 	POP {R0-R8,LR}			// restore used registers
 	BX LR 					// leave
 	
 // set all valid memory locations in pixel buffer to 0
-// inputs: none
+// no input/output arguments
 VGA_clear_pixelbuff_ASM:
 
 	PUSH {R0-R8,LR}
@@ -228,15 +243,15 @@ VGA_clear_pixelbuff_ASM:
 	LDR R2, =PIXEL_buffer	// base address
 	LDR R3, ZEROS			// get some zeros ready
 
-LOOP_OUTER:
+Outer_Loop_Clear:
 		CMP R0, #0
-		BLT END_CLEAR 		// Outer loop counter, looks at x address
+		BLT End_Clear 		// Outer loop counter, at x address
 		MOV R1, R8			// Reset inner loop
 
-LOOP_INNER:
-		CMP R1, #0			// Inner loop, looks at y address
+Inner_Loop_Clear:
+		CMP R1, #0			// Inner loop, at y address
 		SUBLT R0, R0, #1		// Decrement outer loop
-		BLT LOOP_OUTER		// back to outer loop
+		BLT Outer_Loop_Clear	// back to outer loop
 
 		MOV R4, R1			// take y counter
 		ROR R4, #22			// rotate y counter into correct position
@@ -247,11 +262,11 @@ LOOP_INNER:
 
 		STRH R3, [R4] 		// store 0s into the location we determined
 		SUB R1, R1, #1 		// decrement y counter
-		B LOOP_INNER
+		B Inner_Loop_Clear
 
-END_CLEAR: 
-	POP {R0-R8,LR}			// restore used registers
-	BX LR 					// leave
+End_Clear: 
+	POP {R0-R8,LR}			// restore registers
+	BX LR 					
 
 
 // write ASCII code passed in 3rd input
